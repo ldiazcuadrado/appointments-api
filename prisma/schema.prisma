@@ -1,0 +1,209 @@
+generator client {
+  provider        = "prisma-client"
+  previewFeatures = ["relationJoins"]
+  output          = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  admin
+  staff
+  customer
+}
+
+enum AppointmentStatus {
+  pending
+  confirmed
+  cancelled
+  completed
+  no_show
+}
+
+model Organization {
+  id                      String   @id @default(uuid(7)) @db.Uuid
+  name                    String
+  timezone                String
+  minNoticeMinutes        Int      @default(120)
+  maxAdvanceDays          Int      @default(60)
+  slotGranularityMinutes  Int      @default(15)
+  cancellationWindowHours Int      @default(24)
+  autoConfirm             Boolean  @default(true)
+  createdAt               DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt               DateTime @updatedAt @db.Timestamptz(3)
+
+  @@map("organizations")
+}
+
+model User {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  email        String   @unique
+  passwordHash String
+  role         Role
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(3)
+
+  staffMember   StaffMember?
+  customer      Customer?
+  refreshTokens RefreshToken[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid(7)) @db.Uuid
+  userId    String    @db.Uuid
+  familyId  String    @db.Uuid
+  tokenHash String    @unique
+  expiresAt DateTime  @db.Timestamptz(3)
+  revokedAt DateTime? @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([familyId])
+  @@map("refresh_tokens")
+}
+
+model Service {
+  id              String   @id @default(uuid(7)) @db.Uuid
+  name            String
+  description     String?
+  durationMinutes Int
+  bufferMinutes   Int      @default(0)
+  priceCents      Int
+  currency        String   @default("USD") @db.Char(3)
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime @updatedAt @db.Timestamptz(3)
+
+  staff        StaffService[]
+  appointments Appointment[]
+
+  @@map("services")
+}
+
+model StaffMember {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  userId      String?  @unique @db.Uuid
+  displayName String
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  user         User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+  services     StaffService[]
+  workingHours WorkingHours[]
+  timeOff      TimeOff[]
+  appointments Appointment[]
+
+  @@map("staff_members")
+}
+
+model StaffService {
+  staffId   String @db.Uuid
+  serviceId String @db.Uuid
+
+  staff   StaffMember @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  service Service     @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@id([staffId, serviceId])
+  @@map("staff_services")
+}
+
+/// One working interval on an ISO weekday (1 = Monday ... 7 = Sunday), expressed
+/// as minutes since local midnight in the organization time zone.
+model WorkingHours {
+  id          String @id @default(uuid(7)) @db.Uuid
+  staffId     String @db.Uuid
+  weekday     Int    @db.SmallInt
+  startMinute Int    @db.SmallInt
+  endMinute   Int    @db.SmallInt
+
+  staff StaffMember @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@index([staffId])
+  @@map("working_hours")
+}
+
+/// Time off for one staff member, or for the whole organization when staffId is null.
+model TimeOff {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  staffId   String?  @db.Uuid
+  startsAt  DateTime @db.Timestamptz(3)
+  endsAt    DateTime @db.Timestamptz(3)
+  reason    String?
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  staff StaffMember? @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@index([staffId, startsAt])
+  @@map("time_off")
+}
+
+model Customer {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  userId    String?  @unique @db.Uuid
+  name      String
+  email     String   @unique
+  phone     String?
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  user         User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  appointments Appointment[]
+
+  @@map("customers")
+}
+
+/// The no-overlap guarantee lives in the database: see the
+/// appointments_no_overlap exclusion constraint in the migrations.
+model Appointment {
+  id                 String            @id @default(uuid(7)) @db.Uuid
+  serviceId          String            @db.Uuid
+  staffId            String            @db.Uuid
+  customerId         String            @db.Uuid
+  status             AppointmentStatus
+  startsAt           DateTime          @db.Timestamptz(3)
+  endsAt             DateTime          @db.Timestamptz(3)
+  /// endsAt plus the service buffer; the range [startsAt, blockedUntil) is what other bookings may not touch.
+  blockedUntil       DateTime          @db.Timestamptz(3)
+  priceCents         Int
+  currency           String            @db.Char(3)
+  notes              String?
+  cancelledAt        DateTime?         @db.Timestamptz(3)
+  cancellationReason String?
+  reminderSentAt     DateTime?         @db.Timestamptz(3)
+  createdAt          DateTime          @default(now()) @db.Timestamptz(3)
+  updatedAt          DateTime          @updatedAt @db.Timestamptz(3)
+
+  service  Service     @relation(fields: [serviceId], references: [id])
+  staff    StaffMember @relation(fields: [staffId], references: [id])
+  customer Customer    @relation(fields: [customerId], references: [id])
+
+  idempotencyKeys IdempotencyKey[]
+
+  @@index([staffId, startsAt])
+  @@index([customerId, startsAt])
+  @@index([status, startsAt])
+  @@map("appointments")
+}
+
+/// Maps a client-supplied Idempotency-Key to the appointment it created.
+model IdempotencyKey {
+  id            String   @id @default(uuid(7)) @db.Uuid
+  userId        String   @db.Uuid
+  key           String
+  requestHash   String
+  appointmentId String   @db.Uuid
+  createdAt     DateTime @default(now()) @db.Timestamptz(3)
+
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, key])
+  @@index([appointmentId])
+  @@map("idempotency_keys")
+}
