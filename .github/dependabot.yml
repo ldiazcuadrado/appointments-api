@@ -1,0 +1,24 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    groups:
+      prisma:
+        patterns: ['prisma', '@prisma/*']
+      eslint:
+        patterns: ['eslint', '@eslint/*', 'typescript-eslint']
+      vitest:
+        patterns: ['vitest', '@vitest/*']
+      fastify:
+        patterns: ['fastify', '@fastify/*', 'fastify-*']
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
