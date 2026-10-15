@@ -1,0 +1,18 @@
+node_modules/
+dist/
+coverage/
+.env
+.env.*
+!.env.example
+src/generated/
+*.log
+.DS_Store
+
+# Caches and local databases
+.eslintcache
+*.tsbuildinfo
+.cache/
+data/
+*.db
+*.sqlite
+*.sqlite3
