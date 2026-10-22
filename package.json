@@ -47,7 +47,7 @@
     "fastify-type-provider-zod": "^7.0.0",
     "jose": "^6.2.12",
     "luxon": "^3.7.2",
-    "nodemailer": "^10.1.1",
+    "nodemailer": "^10.1.7",
     "pg": "^8.23.1",
     "pg-boss": "^12.38.0",
     "pino": "^10.4.0",
